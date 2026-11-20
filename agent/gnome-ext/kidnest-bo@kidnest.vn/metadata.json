@@ -1,0 +1,15 @@
+{
+  "uuid": "kidnest-bo@kidnest.vn",
+  "name": "Gọi điện - Nhắn tin con",
+  "description": "Cho chương trình Gọi điện - Nhắn tin con biết cửa sổ đang mở và chụp màn hình khi bố yêu cầu.",
+  "shell-version": [
+    "46",
+    "47",
+    "48"
+  ],
+  "version": 1,
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ]
+}

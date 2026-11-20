@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/icon.png">
+<title>📞 Cuộc gọi</title>
+<style>
+html,body{margin:0;height:100%;background:#0d1b2a;color:#fff;font:16px/1.4 system-ui,"Ubuntu",sans-serif}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;box-sizing:border-box}
+.icon{font-size:72px}
+.ringing .icon{animation:shake 1s infinite}
+@keyframes shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-15deg)}40%{transform:rotate(15deg)}60%{transform:rotate(-10deg)}}
+#title{font-size:28px;font-weight:600;text-align:center}
+#sub{font-size:18px;opacity:.8;text-align:center;min-height:24px}
+.btns{display:flex;gap:36px;margin-top:40px}
+button{border:0;border-radius:50%;width:92px;height:92px;font-size:34px;color:#fff;cursor:pointer;position:relative}
+button span{position:absolute;top:100px;left:50%;transform:translateX(-50%);font-size:15px;white-space:nowrap}
+.green{background:#1a7f37}.red{background:#d1242f}.grey{background:#3d4b5c}.on{background:#fff;color:#0d1b2a}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="icon">📞</div>
+<div id="title">…</div>
+<div id="sub"></div>
+<div class="btns">
+  <button id="bAnswer" class="green hide">📞<span>Nghe</span></button>
+  <button id="bMute" class="grey hide">🎤<span>Tắt tiếng</span></button>
+  <button id="bEnd" class="red hide">✆<span>Kết thúc</span></button>
+</div>
+<audio id="remote" autoplay></audio>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const NAME = { bo: 'Bố', me: 'Mẹ', con: 'Con' };
+const qs = new URLSearchParams(location.search);
+let C = { id: qs.get('id'), dir: qs.get('out') ? 'up' : 'down' };
+let pc = null, mic = null, actx = null, t0 = 0, timer = null, poller = null, ended = false;
+
+async function call(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json', 'x-bo': '1' }, body: JSON.stringify(body), keepalive: true });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+function show(title, sub, mode) {
+  document.body.classList.toggle('ringing', mode === 'ringing' || mode === 'calling');
+  $('title').textContent = title; $('sub').textContent = sub || '';
+  $('bAnswer').classList.toggle('hide', mode !== 'ringing');
+  $('bMute').classList.toggle('hide', mode !== 'talking');
+  $('bEnd').classList.toggle('hide', mode === 'over');
+  $('bEnd').querySelector('span').textContent = mode === 'ringing' ? 'Từ chối' : mode === 'calling' ? 'Hủy' : 'Kết thúc';
+}
+const pad = (n) => String(n).padStart(2, '0');
+const clock = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${pad(s % 60)}`; };
+function gather(p, ms = 5000) {
+  return new Promise((res) => {
+    if (p.iceGatheringState === 'complete') return res();
+    const t = setTimeout(res, ms);
+    p.addEventListener('icegatheringstatechange', () => { if (p.iceGatheringState === 'complete') { clearTimeout(t); res(); } });
+  });
+}
+// Mic with the browser's echo cancelling, then a software boost (the laptop mic is quiet) through a limiter.
+async function openMic(gain) {
+  mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  if (!gain || gain <= 1) return mic;
+  actx = new AudioContext();
+  const src = actx.createMediaStreamSource(mic), g = actx.createGain(), lim = actx.createDynamicsCompressor();
+  g.gain.value = gain;
+  lim.threshold.value = -6; lim.knee.value = 4; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.2;
+  const dst = actx.createMediaStreamDestination();
+  src.connect(g); g.connect(lim); lim.connect(dst);
+  return dst.stream;
+}
+async function makePc() {
+  const ice = await call('/api/call/ice');
+  const stream = await openMic(ice.gain);
+  // The child's network only lets TCP 443 out: go through the TURN relay.
+  pc = new RTCPeerConnection({ iceServers: ice.iceServers, iceTransportPolicy: ice.relay ? 'relay' : 'all' });
+  for (const t of stream.getTracks()) pc.addTrack(t, stream);
+  pc.ontrack = (e) => { $('remote').srcObject = e.streams[0]; $('remote').play().catch(() => {}); };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'connected') talking();
+    if (pc.connectionState === 'failed') hangup('Không kết nối được');
+  };
+}
+function talking() {
+  if (t0) return;
+  t0 = Date.now();
+  const who = C.dir === 'down' ? NAME[C.caller] : NAME[C.answerer] || 'bố mẹ';
+  const tick = () => show(`Đang nói chuyện với ${who}`, clock(Date.now() - t0), 'talking');
+  tick(); timer = setInterval(tick, 1000);
+}
+function over(text) {
+  if (ended) return;
+  ended = true;
+  clearInterval(timer); clearInterval(poller);
+  mic?.getTracks().forEach((t) => t.stop());
+  try { pc?.close(); } catch {}
+  actx?.close().catch(() => {});
+  show(text, 'Cửa sổ sẽ tự đóng', 'over');
+  setTimeout(() => window.close(), 3000);
+}
+function hangup(text) {
+  if (ended) return;
+  if (C.id) call('/api/call/end', { id: C.id }).catch(() => {});
+  over(text || 'Đã kết thúc');
+}
+function endText(x) {
+  if (x.reason === 'hangup') return (x.ended_by === 'con' ? 'Đã kết thúc' : `${NAME[x.ended_by] || 'Bố mẹ'} đã tắt máy`) + (x.answered_at ? ' · ' + clock(x.ended_at - x.answered_at) : '');
+  if (x.dir === 'down') return { cancelled: `${NAME[x.caller]} đã tắt máy`, missed: 'Cuộc gọi nhỡ', lost: 'Mất kết nối' }[x.reason] || 'Đã kết thúc';
+  return { declined: `${NAME[x.ended_by] || 'Bố mẹ'} đang bận, con nhắn tin nhé`, missed: 'Bố mẹ chưa nghe máy, con nhắn tin nhé', lost: 'Mất kết nối' }[x.reason] || 'Đã kết thúc';
+}
+function startPolling() {
+  poller = setInterval(async () => {
+    try {
+      const x = await call('/api/call/info?id=' + encodeURIComponent(C.id));
+      Object.assign(C, { caller: x.caller, answerer: x.answerer });
+      if (x.state === 'ended') return over(endText(x));
+      if (C.dir === 'up' && x.state === 'active' && x.answer && !C.remote) {
+        C.remote = true;
+        show(`${NAME[x.answerer] || 'Bố mẹ'} đã nghe máy`, 'Đang kết nối…', 'calling');
+        await pc.setRemoteDescription({ type: 'answer', sdp: x.answer });
+      }
+    } catch (e) { if (/no call|404/.test(e.message)) over('Đã kết thúc'); }
+  }, 1000);
+}
+
+async function incoming() {
+  const x = await call('/api/call/info?id=' + encodeURIComponent(C.id));
+  Object.assign(C, { caller: x.caller });
+  if (x.state !== 'ringing') return over(x.state === 'ended' ? endText(x) : 'Đã kết thúc');
+  show(`${NAME[x.caller] || 'Bố'} đang gọi`, 'Bấm Nghe để nói chuyện', 'ringing');
+  startPolling();
+  $('bAnswer').onclick = async () => {
+    show('Đang kết nối…', '', 'calling');
+    try {
+      const y = await call('/api/call/info?id=' + encodeURIComponent(C.id));
+      if (y.state !== 'ringing') return over(endText(y));
+      await makePc();
+      await pc.setRemoteDescription({ type: 'offer', sdp: y.offer });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await gather(pc);
+      await call('/api/call/answer', { id: C.id, answer: pc.localDescription.sdp });
+    } catch (e) { hangup('Không nghe được: ' + e.message); }
+  };
+  if (qs.get('auto')) $('bAnswer').onclick();   // "Gọi tự trả lời": pick up at once
+}
+async function outgoing() {
+  show('Đang gọi bố mẹ…', 'Đang bật micro', 'calling');
+  try {
+    await makePc();
+    await pc.setLocalDescription(await pc.createOffer());
+    $('sub').textContent = 'Đang chuẩn bị…';
+    await gather(pc);
+    if (ended) return;
+    const r = await call('/api/call/start', { offer: pc.localDescription.sdp });
+    C.id = r.id;
+    $('sub').textContent = 'Điện thoại của bố mẹ đang đổ chuông';
+    startPolling();
+  } catch (e) { over('Không gọi được: ' + e.message); }
+}
+$('bEnd').onclick = () => hangup(C.dir === 'down' && !pc ? 'Đã từ chối' : 'Đã kết thúc');
+$('bMute').onclick = () => {
+  const t = mic?.getAudioTracks()[0];
+  if (!t) return;
+  t.enabled = !t.enabled;
+  $('bMute').classList.toggle('on', !t.enabled);
+  $('bMute').querySelector('span').textContent = t.enabled ? 'Tắt tiếng' : 'Bật tiếng';
+};
+window.addEventListener('pagehide', () => { if (!ended && C.id) call('/api/call/end', { id: C.id }).catch(() => {}); });
+(C.dir === 'up' ? outgoing() : incoming()).catch((e) => over('Lỗi: ' + e.message));
+</script>
+</body>
+</html>

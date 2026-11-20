@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/icon.png">
+<title>Gọi điện - Nhắn tin con</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1b1f24;--mute:#6a737d;--line:#e2e6ea;--pri:#1f6feb;--bo:#e9ecef;--con:#1f6feb;--ok:#1a7f37;--warn:#bf3989}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--ink:#e6edf3;--mute:#8b949e;--line:#30363d;--pri:#4493f8;--bo:#21262d;--con:#1f6feb;--ok:#3fb950;--warn:#f778ba}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,"Ubuntu",sans-serif}
+body{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;height:100vh}
+@media (max-width:760px){body{grid-template-columns:1fr;grid-template-rows:1fr auto;height:auto;min-height:100vh}}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0}
+h2{margin:0;padding:12px 14px;font-size:17px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+h2 span{font-weight:normal;font-size:13px;color:var(--mute);margin-left:auto}
+#msgs{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:6px;min-height:240px}
+.m{max-width:85%;padding:8px 11px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.m.bo{align-self:flex-start;background:var(--bo);border-bottom-left-radius:4px}
+.m.con{align-self:flex-end;background:var(--con);color:#fff;border-bottom-right-radius:4px}
+.m.he{align-self:center;color:var(--mute);font-size:13px}
+.m small{display:block;font-size:11px;opacity:.7;margin-top:2px}
+.new{outline:2px solid var(--warn)}
+.day{align-self:center;font-size:12px;color:var(--mute)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 8px}
+.quick button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:16px;padding:5px 10px;font-size:14px;cursor:pointer}
+form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+input{flex:1;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);min-width:0}
+input[type=datetime-local]{flex:0 0 auto}
+button.pri{border:0;border-radius:10px;padding:9px 14px;background:var(--pri);color:#fff;font-size:15px;cursor:pointer}
+#tasks{flex:1;overflow:auto;padding:4px 14px}
+.task{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:0}
+.task input{flex:0 0 auto;width:22px;height:22px;margin-top:1px}
+.task .t{flex:1}
+.task .meta{font-size:12px;color:var(--mute)}
+.task.done .title{text-decoration:line-through;color:var(--mute)}
+.over{color:var(--warn)!important;font-weight:600}
+.x{border:0;background:none;color:var(--mute);cursor:pointer;font-size:16px}
+.mute{color:var(--mute);font-size:14px;padding:12px 0}
+#taskForm{flex-wrap:wrap}
+#rep{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:10px 12px 0;padding:10px 12px;border-radius:10px;background:#fff3cd;color:#5c4400}
+#rep[hidden]{display:none}
+#rep button{border:0;border-radius:10px;padding:10px 16px;background:#bf3989;color:#fff;font-size:16px;font-weight:600;cursor:pointer;white-space:nowrap}
+.mute2{opacity:.7;font-size:13px}
+.m audio{display:block;width:240px;max-width:100%;height:40px;margin:2px 0}
+.m .tr{font-style:italic}
+.call{border:0;border-radius:10px;padding:6px 12px;background:#1a7f37;color:#fff;font-size:14px;cursor:pointer}
+#net{margin-left:auto}
+</style>
+</head>
+<body>
+<section>
+  <h2>💬 Gọi điện - Nhắn tin con <span id="net"></span><button id="btnCall" class="call" title="Gọi cho bố mẹ">📞 Gọi bố mẹ</button></h2>
+  <div id="rep" hidden><div>🔁 <span id="repWho">Bố</span> đang nhắc lặp lại: <b id="repBody"></b> <span id="repN" class="mute2"></span></div><button id="btnRepStop">⏸ Dừng phát</button></div>
+  <div id="msgs"></div>
+  <div class="quick">
+    <button data-q="Dạ, con nghe rồi ạ">Dạ, con nghe rồi ạ</button>
+    <button data-q="Con xin 5 phút nữa ạ">Con xin 5 phút nữa ạ</button>
+    <button data-q="Con làm xong rồi ạ">Con làm xong rồi ạ</button>
+  </div>
+  <form id="msgForm"><input id="txt" placeholder="Trả lời bố…" autocomplete="off"><button class="pri">Gửi</button></form>
+</section>
+<section>
+  <h2>✅ Việc cần làm <span id="cnt"></span></h2>
+  <div id="tasks"></div>
+  <form id="taskForm">
+    <input id="tTitle" placeholder="Thêm việc của con…" autocomplete="off">
+    <input id="tDue" type="datetime-local" title="Hạn (không bắt buộc)">
+    <button class="pri">Thêm</button>
+  </form>
+</section>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const pad = (n) => String(n).padStart(2, '0');
+const hm = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+const dayLabel = (ms) => sameDay(ms, Date.now()) ? 'Hôm nay' : sameDay(ms, Date.now() - 864e5) ? 'Hôm qua' : `${pad(new Date(ms).getDate())}/${pad(new Date(ms).getMonth() + 1)}`;
+const when = (ms) => sameDay(ms, Date.now()) ? hm(ms) : `${hm(ms)} ${dayLabel(ms)}`;
+let S = { messages: [], tasks: [], online: true, now: Date.now() };
+let lastCount = -1;
+
+async function call(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json', 'x-bo': '1' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  S = j; render();
+}
+function render() {
+  $('rep').hidden = !S.repeat;
+  if (S.repeat) { $('repWho').textContent = S.repeat.name || 'Bố'; $('repBody').textContent = S.repeat.body; $('repN').textContent = `(đã phát ${S.repeat.n} lần)`; }
+  $('net').textContent = S.online ? '' : '⚠ mất mạng — tin sẽ gửi sau';
+  const box = $('msgs');
+  const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  let html = '', last = 0;
+  for (const m of S.messages) {
+    if (!last || !sameDay(last, m.created_at)) html += `<div class="day">${dayLabel(m.created_at)}</div>`;
+    last = m.created_at;
+    const parent = m.sender === 'bo' || m.sender === 'me';
+    const unread = parent && !m.read_at;
+    const who = m.sender === 'bo' ? 'Bố · ' : m.sender === 'me' ? 'Mẹ · ' : '';
+    const body = m.audio
+      ? `<audio controls preload="none" src="/voice/${esc(m.audio)}"></audio>${m.body ? `<div class="tr">“${esc(m.body)}”</div>` : ''}`
+      : esc(m.body);
+    const len = m.audio ? ` · 🎤${m.audio_ms ? ' ' + Math.round(m.audio_ms / 1000) + 's' : ''}` : '';
+    html += `<div class="m ${parent ? 'bo' : m.sender} ${unread ? 'new' : ''}">${body}<small>${who}${hm(m.created_at)}${len}${m.pending ? ' · đang gửi…' : ''}</small></div>`;
+  }
+  html = html || '<div class="mute">Chưa có tin nhắn.</div>';
+  const playing = [...box.querySelectorAll('audio')].some((a) => !a.paused);
+  if (html !== box.dataset.html && !playing) { box.innerHTML = html; box.dataset.html = html; }
+  if (atEnd || S.messages.length !== lastCount) box.scrollTop = box.scrollHeight;
+  lastCount = S.messages.length;
+
+  const open = S.tasks.filter((t) => !t.done_at);
+  $('cnt').textContent = open.length ? `còn ${open.length} việc` : '';
+  $('tasks').innerHTML = S.tasks.length ? S.tasks.map((t) => {
+    const over = !t.done_at && t.due_at && t.due_at < S.now;
+    const meta = [t.created_by === 'bo' ? 'bố giao' : t.created_by === 'me' ? 'mẹ giao' : 'con tự thêm', t.due_at ? 'hạn ' + when(t.due_at) : '', t.done_at ? 'xong ' + when(t.done_at) : ''].filter(Boolean).join(' · ');
+    return `<div class="task ${t.done_at ? 'done' : ''}"><input type="checkbox" data-id="${esc(t.id)}" ${t.done_at ? 'checked' : ''}>
+      <div class="t"><div class="title">${esc(t.title)}</div><div class="meta ${over ? 'over' : ''}">${esc(meta)}${over ? ' · quá hạn!' : ''}</div></div>
+      ${t.created_by === 'con' ? `<button class="x" data-del="${esc(t.id)}" title="Xoá">✕</button>` : ''}</div>`;
+  }).join('') : '<div class="mute">Không có việc nào 🎉</div>';
+  markRead();
+}
+function markRead() {
+  if (document.visibilityState === 'visible' && document.hasFocus() && S.messages.some((m) => (m.sender === 'bo' || m.sender === 'me') && !m.read_at)) call('/api/read', {});
+}
+$('msgForm').onsubmit = (e) => { e.preventDefault(); const t = $('txt').value.trim(); if (t) { $('txt').value = ''; call('/api/send', { text: t }); } };
+$('taskForm').onsubmit = (e) => {
+  e.preventDefault();
+  const title = $('tTitle').value.trim(); if (!title) return;
+  const v = $('tDue').value;
+  call('/api/task', { title, due_at: v ? new Date(v).getTime() : null });
+  $('tTitle').value = ''; $('tDue').value = '';
+};
+document.addEventListener('click', (e) => {
+  const q = e.target.closest('[data-q]'), d = e.target.closest('[data-del]');
+  if (q) call('/api/send', { text: q.dataset.q });
+  if (d) call('/api/task/del', { id: d.dataset.del });
+});
+document.addEventListener('change', (e) => {
+  const c = e.target.closest('input[type=checkbox][data-id]');
+  if (c) call('/api/task/done', { id: c.dataset.id, done: c.checked });
+});
+$('btnCall').onclick = () => window.open('/call?out=1', 'bocall', 'popup,width=440,height=620');
+$('btnRepStop').onclick = () => call('/api/repeat/stop', {});
+window.addEventListener('focus', markRead);
+document.addEventListener('visibilitychange', markRead);
+call('/api/state');
+setInterval(() => call('/api/state').catch(() => { $('net').textContent = '⚠ chương trình Gọi điện - Nhắn tin con không chạy'; }), 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+.dev-sid
+.dev-token
+__pycache__/
+.venv-test/

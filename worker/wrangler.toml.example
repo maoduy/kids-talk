@@ -1,0 +1,28 @@
+# Copy to wrangler.toml, then fill in the two ids printed by:
+#   npx wrangler d1 create kids-talk
+#   npx wrangler kv namespace create kids-talk
+name = "kids-talk"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+assets = { directory = "public", binding = "ASSETS" }
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kids-talk"
+database_id = "<D1 database id>"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "<KV namespace id>"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+TZ_OFFSET_MIN = "420"          # Vietnam (UTC+7)
+# TURN_HOST = "turn.example.com" # your coturn (with TURN_SECRET as a secret) — needed when the child's network blocks UDP
+# Secrets (npx wrangler secret bulk < secrets.json, made by: node gen-secrets.mjs --json):
+#   AGENT_TOKEN (optional), SETUP_CODE, SESSION_KEY, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUBJECT
+# Optional: TURN_SECRET (+ TURN_HOST above) or TURN_KEY_ID + TURN_KEY_TOKEN (Cloudflare Realtime TURN)

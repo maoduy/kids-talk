@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6feb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gọi điện - Nhắn tin con">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>Gọi điện - Nhắn tin con</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1b1f24;--mute:#6a737d;--line:#e2e6ea;--pri:#1f6feb;--bo:#1f6feb;--con:#e9ecef;--ok:#1a7f37;--warn:#bf3989}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--ink:#e6edf3;--mute:#8b949e;--line:#30363d;--pri:#4493f8;--bo:#1f6feb;--con:#21262d;--ok:#3fb950;--warn:#f778ba}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;max-width:720px;margin:0 auto}
+header{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pres{font-size:13px;color:var(--mute)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#999;margin-right:5px}
+.dot.on{background:var(--ok)}
+main{flex:1;overflow:auto;padding:12px 16px}
+nav{display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--mute);padding:10px 0 8px;font-size:13px}
+nav button b{display:block;font-size:20px;font-weight:normal}
+nav button.act{color:var(--pri)}
+.hide{display:none!important}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+button.pri,button.sec{border:0;border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer}
+button.pri{background:var(--pri);color:#fff}
+button.sec{background:var(--con);color:var(--ink)}
+input[type=text],input[type=datetime-local],textarea{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+#msgs{display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
+.m{max-width:82%;padding:8px 11px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.m.bo{align-self:flex-end;background:var(--bo);color:#fff;border-bottom-right-radius:4px}
+.m.con{align-self:flex-start;background:var(--con);border-bottom-left-radius:4px}
+.m.he{align-self:center;background:none;color:var(--mute);font-size:13px}
+.m small{display:block;font-size:11px;opacity:.75;margin-top:2px;text-align:right}
+.day{align-self:center;font-size:12px;color:var(--mute);margin:6px 0}
+#composer{display:flex;gap:8px;align-items:flex-end;padding:8px 16px;background:var(--card);border-top:1px solid var(--line)}
+#composer textarea{resize:none;height:44px;max-height:120px}
+#composer label{font-size:12px;color:var(--mute);white-space:nowrap;display:flex;flex-direction:column;align-items:center}
+.task{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:0}
+.task input{width:22px;height:22px;margin-top:2px}
+.task .t{flex:1}
+.task .meta{font-size:12px;color:var(--mute)}
+.task.done .title{text-decoration:line-through;color:var(--mute)}
+.over{color:var(--warn)!important}
+.x{border:0;background:none;color:var(--mute);font-size:18px;cursor:pointer}
+.row{display:flex;gap:8px;margin-top:8px}
+.big{font-size:18px;font-weight:600}
+.mute{color:var(--mute);font-size:13px}
+.bar{height:8px;background:var(--pri);border-radius:4px;opacity:.75}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:4px 0;vertical-align:top}
+select{font:inherit;padding:9px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);flex:1}
+.m .who{font-weight:600;opacity:.9}
+td.n{text-align:right;white-space:nowrap;color:var(--mute);padding-left:8px}
+#shot img{width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px}
+#login{flex:1;display:flex;flex-direction:column;justify-content:center;padding:24px}
+#login h2{margin:0 0 8px}
+.err{color:var(--warn);font-size:14px;min-height:20px}
+#btnMic{font-size:18px;padding:9px 11px}
+#recBar{display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--card);border-top:1px solid var(--line)}
+.recdot{width:12px;height:12px;border-radius:50%;background:#e5534b;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.m audio{display:block;width:230px;max-width:100%;height:40px;margin:2px 0}
+.m .tr{font-style:italic}
+.vplay{border:0;border-radius:16px;padding:6px 14px;font-size:14px;background:rgba(255,255,255,.25);color:inherit;cursor:pointer;margin:2px 0}
+.m.con .vplay{background:rgba(0,0,0,.08)}
+.devbar{display:flex;gap:8px;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
+.devbar button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:16px;padding:5px 12px;font-size:14px;white-space:nowrap;cursor:pointer}
+.devbar button.act{background:var(--pri);color:#fff;border-color:var(--pri)}
+#btnCall,#btnAuto{padding:6px 10px;font-size:18px}
+#btnAuto small{font-size:10px;margin-left:1px}
+#callView{position:fixed;inset:0;z-index:20;background:#0d1b2a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px}
+.cvIcon{font-size:64px}
+.cvTitle{font-size:24px;font-weight:600;text-align:center}
+.cvSub{font-size:16px;opacity:.8;text-align:center;min-height:22px}
+.cvBtns{display:flex;gap:28px;margin-top:36px}
+.cvb{border:0;border-radius:50%;width:76px;height:76px;font-size:28px;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.cvb span{position:absolute;top:84px;font-size:13px;white-space:nowrap;color:#fff}
+.cvb.green{background:#1a7f37}.cvb.red{background:#d1242f}.cvb.grey{background:#3d4b5c}.cvb.on{background:#fff;color:#0d1b2a}
+#callView.ringing .cvIcon{animation:shake 1s infinite}
+@keyframes shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-15deg)}40%{transform:rotate(15deg)}60%{transform:rotate(-10deg)}}
+</style>
+</head>
+<body>
+<section id="login" class="hide">
+  <h2>Gọi điện - Nhắn tin con</h2>
+  <p class="mute" id="loginHint">Đăng nhập bằng vân tay / khuôn mặt (passkey).</p>
+  <button class="pri" id="btnLogin">Đăng nhập</button>
+  <div id="regBox" class="card" style="margin-top:20px">
+    <div class="mute">Lần đầu trên điện thoại này? Nhập mã thiết lập (hoặc mã mời):</div>
+    <input type="text" id="regCode" inputmode="numeric" autocomplete="one-time-code" style="margin-top:8px">
+    <div class="row" style="align-items:center"><span class="mute">Đây là điện thoại của:</span>
+      <label><input type="radio" name="who" value="bo" checked> Bố</label>
+      <label><input type="radio" name="who" value="me"> Mẹ</label></div>
+    <input type="text" id="regName" placeholder="Tên thiết bị (vd: iPhone của mẹ)" style="margin-top:8px">
+    <div class="row"><button class="sec" id="btnReg">Tạo passkey</button></div>
+  </div>
+  <div class="err" id="loginErr"></div>
+</section>
+
+<header id="hdr" class="hide"><h1>Gọi điện - Nhắn tin con</h1><span id="pres"></span><button class="sec" id="btnCall" title="Gọi cho con">📞</button><button class="sec" id="btnAuto" title="Gọi tự trả lời: máy con tự nghe máy, kể cả khi chưa đăng nhập">📞<small>tự</small></button></header>
+
+<div id="devBar" class="devbar hide"></div>
+<div id="callView" class="hide">
+  <div class="cvIcon">📞</div>
+  <div id="cvTitle" class="cvTitle"></div>
+  <div id="cvSub" class="cvSub"></div>
+  <div class="cvBtns">
+    <button id="cvAnswer" class="cvb green">📞<span>Nghe</span></button>
+    <button id="cvMute" class="cvb grey">🎤<span>Tắt tiếng</span></button>
+    <button id="cvEnd" class="cvb red">✆<span>Kết thúc</span></button>
+  </div>
+  <audio id="callAudio" autoplay playsinline></audio>
+</div>
+
+<main id="tab-chat" class="hide"><div id="msgs"></div></main>
+<div id="composer" class="hide">
+  <textarea id="txt" placeholder="Nhắn cho con…"></textarea>
+  <label><input type="checkbox" id="speak" checked>Đọc to</label>
+  <label title="Máy con phát lại liên tục (nghỉ 10 giây, tối đa 1 giờ) đến khi con bấm Dừng hoặc trả lời"><input type="checkbox" id="repeat">Lặp lại</label>
+  <button class="sec" id="btnMic" title="Ghi âm giọng nói">🎤</button>
+  <button class="pri" id="btnSend">Gửi</button>
+</div>
+<div id="recBar" class="hide">
+  <span class="recdot"></span><span id="recTime">0:00</span><span class="mute" style="flex:1">Đang ghi âm…</span>
+  <button class="sec" id="btnRecCancel">Huỷ</button>
+  <button class="pri" id="btnRecSend">■ Gửi</button>
+</div>
+
+<main id="tab-tasks" class="hide">
+  <div class="card">
+    <input type="text" id="tTitle" placeholder="Việc mới cho con (vd: Làm BTVN Toán)">
+    <div class="row"><input type="datetime-local" id="tDue"><button class="pri" id="btnTask">Thêm</button></div>
+    <div class="mute" style="margin-top:6px">Đến giờ, máy sẽ đọc to nhắc con. Quá giờ chưa xong → báo bố.</div>
+  </div>
+  <div class="card" id="taskList"></div>
+  <div class="card hide" id="doneBox"><div class="mute">Đã xong (7 ngày)</div><div id="doneList"></div></div>
+</main>
+
+<main id="tab-pc" class="hide">
+  <div id="pcDevBar" class="devbar hide" style="padding:0 0 10px;background:none;border:0"></div>
+  <div class="card" id="nowCard"></div>
+  <div class="card" id="lockCard">
+    <div class="big">🔒 Khóa máy</div>
+    <div id="lockState" class="mute" style="margin:4px 0 8px">—</div>
+    <div id="lockForm">
+      <div class="row" style="margin:0">
+        <select id="lockMin">
+          <option value="30">30 phút</option><option value="60" selected>1 giờ</option><option value="120">2 giờ</option>
+          <option value="0">Đến khi bố/mẹ mở</option>
+        </select>
+        <button class="pri" id="btnLock" style="background:#bf3989">🔒 Khóa máy</button>
+      </div>
+      <input type="text" id="lockMsg" placeholder="Lời nhắn hiện trên máy con (vd: Đi ngủ thôi con)" style="margin-top:8px">
+      <div class="mute" style="margin-top:6px">Mật khẩu của con sẽ không mở được máy cho đến khi hết giờ hoặc bố/mẹ bấm Mở khóa.</div>
+    </div>
+    <div class="row hide" id="unlockRow" style="margin:0"><button class="pri" id="btnUnlock">🔓 Mở khóa</button></div>
+  </div>
+  <div class="card">
+    <div class="row" style="margin:0;align-items:center"><div class="big" style="flex:1">Màn hình</div><button class="pri" id="btnShot">Chụp ngay</button></div>
+    <div id="shot" class="mute"></div>
+  </div>
+  <div class="card"><div class="big">Hôm nay</div><div id="today" class="mute">—</div></div>
+  <div class="card"><div class="big">Gần đây</div><div id="recent" class="mute">—</div></div>
+</main>
+
+<main id="tab-set" class="hide">
+  <div class="card">
+    <div class="big">Thông báo</div>
+    <p class="mute" id="pushState">—</p>
+    <div class="row"><button class="pri" id="btnPush">Bật thông báo</button><button class="sec" id="btnPushTest">Gửi thử</button></div>
+    <p class="mute">iPhone: phải mở trang này từ biểu tượng trên màn hình chính (Chia sẻ → Thêm vào MH chính) thì mới bật được thông báo.</p>
+  </div>
+  <div class="card">
+    <div class="big">Thêm điện thoại khác (vd: mẹ)</div>
+    <div class="row"><button class="sec" id="btnInvite">Tạo mã mời (10 phút)</button></div>
+    <p class="big" id="invite"></p>
+    <div id="pkList" class="mute"></div>
+  </div>
+  <div class="card">
+    <div class="big">🔐 Mã hóa đầu-cuối</div>
+    <p class="mute" id="e2eState">—</p>
+    <div class="row"><button class="pri" id="btnE2eOn">Bật mã hóa</button><button class="sec" id="btnE2eShow">Hiện khóa</button></div>
+    <div class="row"><input type="text" id="e2eIn" placeholder="Dán khóa gia đình (43 ký tự)" autocomplete="off"><button class="sec" id="btnE2eSet">Nhập</button></div>
+    <p class="mute" id="e2eKey" style="word-break:break-all"></p>
+    <p class="mute">Khóa chỉ nằm trên điện thoại bố mẹ và máy của con, không bao giờ gửi lên relay. Mất hết các bản khóa thì không đọc lại được tin cũ.</p>
+  </div>
+  <div class="card">
+    <div class="big">💻 Thêm máy của con</div>
+    <div class="row"><input type="text" id="devName" placeholder="Tên con (vd: An)"><button class="sec" id="btnDevAdd">Tạo mã cài</button></div>
+    <pre id="devCmd" class="mute" style="white-space:pre-wrap;word-break:break-all;font-size:12px"></pre>
+  </div>
+  <div class="card"><button class="sec" id="btnLogout">Đăng xuất</button></div>
+</main>
+
+<nav id="nav" class="hide">
+  <button data-tab="chat" class="act"><b>💬</b>Tin nhắn</button>
+  <button data-tab="tasks"><b>✅</b>Việc</button>
+  <button data-tab="pc"><b>💻</b>Máy con</button>
+  <button data-tab="set"><b>⚙</b>Cài đặt</button>
+</nav>
+<script src="/webauthn.js"></script>
+<script src="/crypto.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
