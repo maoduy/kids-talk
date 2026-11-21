@@ -328,6 +328,57 @@ class Hold:
             threading.Timer(self.linger, back).start()
 
 
+def console_spawn(argv):
+    """CreateProcessAsUser with our SYSTEM token moved to the console session. Returns the process handle."""
+    k32, adv = ctypes.windll.kernel32, ctypes.windll.advapi32
+    k32.GetCurrentProcess.restype = W.HANDLE
+    tok, dup = W.HANDLE(), W.HANDLE()
+    if not adv.OpenProcessToken(W.HANDLE(k32.GetCurrentProcess()), 0xF01FF, ctypes.byref(tok)):   # TOKEN_ALL_ACCESS
+        raise ctypes.WinError()
+    try:
+        if not adv.DuplicateTokenEx(tok, 0x02000000, None, 2, 1, ctypes.byref(dup)):   # MAXIMUM_ALLOWED, impersonation, primary
+            raise ctypes.WinError()
+    finally:
+        k32.CloseHandle(tok)
+    try:
+        sid = W.DWORD(k32.WTSGetActiveConsoleSessionId())
+        if not adv.SetTokenInformation(dup, 12, ctypes.byref(sid), 4):   # TokenSessionId (needs SeTcbPrivilege)
+            raise ctypes.WinError()
+
+        class SI(ctypes.Structure):
+            _fields_ = [('cb', W.DWORD), ('lpReserved', W.LPWSTR), ('lpDesktop', W.LPWSTR), ('lpTitle', W.LPWSTR),
+                        ('dwX', W.DWORD), ('dwY', W.DWORD), ('dwXSize', W.DWORD), ('dwYSize', W.DWORD),
+                        ('dwXCountChars', W.DWORD), ('dwYCountChars', W.DWORD), ('dwFillAttribute', W.DWORD),
+                        ('dwFlags', W.DWORD), ('wShowWindow', W.WORD), ('cbReserved2', W.WORD),
+                        ('lpReserved2', ctypes.c_void_p), ('hStdInput', W.HANDLE), ('hStdOutput', W.HANDLE),
+                        ('hStdError', W.HANDLE)]
+
+        class PI(ctypes.Structure):
+            _fields_ = [('hProcess', W.HANDLE), ('hThread', W.HANDLE), ('dwProcessId', W.DWORD), ('dwThreadId', W.DWORD)]
+        si, pi = SI(), PI()
+        si.cb = ctypes.sizeof(SI)
+        si.lpDesktop = 'winsta0\\winlogon'
+        cmd = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv))
+        if not adv.CreateProcessAsUserW(dup, None, cmd, None, None, False, 0x08000000, None, APP,   # CREATE_NO_WINDOW
+                                        ctypes.byref(si), ctypes.byref(pi)):
+            raise ctypes.WinError()
+        k32.CloseHandle(pi.hThread)
+        return pi.hProcess
+    finally:
+        k32.CloseHandle(dup)
+
+
+def play_main(paths):
+    """`bo_win.py play a.wav b.wav`: started in the console session by the service (login screen)."""
+    import winsound
+    saved = loud()
+    try:
+        for p in paths:
+            winsound.PlaySound(p, winsound.SND_FILENAME)
+    finally:
+        unloud(saved)
+
+
 def service_main():
     import sqlite3
     os.makedirs(os.path.join(DATA, 'logs'), exist_ok=True)
@@ -711,29 +762,28 @@ def service_main():
     CALL = {}
     RANG = set()
 
-    SYS = Hold(pause=False, linger=0)   # the login screen: no media of his to pause
-
     def call_end_local(cid):
         if CALL.get('id') == cid:
             log('call over', cid, CALL.get('state'))
-            p, held = CALL.get('proc'), CALL.get('held')
             CALL.clear()
-            if p and p.poll() is None:
-                subprocess.run(['taskkill', '/T', '/F', '/PID', str(p.pid)], capture_output=True, creationflags=0x08000000)
-            if held:
-                SYS.release(now=True)
             to_helper(kind='call_end', id=cid)
 
     def sys_play(paths):
-        """Play from the service itself (nobody logged in: the sound comes out at the login screen)."""
-        import winsound
-        for p in paths:
-            if p and os.path.exists(p):
-                try:
-                    winsound.PlaySound(p, winsound.SND_FILENAME)
-                except RuntimeError as e:
-                    log('login-screen sound failed', repr(e))
-                    return False
+        """Nobody logged in: session 0 (the service) has no audible sound, so play from a small process
+        started as SYSTEM in the console session (the login screen). Waits until it is done."""
+        paths = [p for p in paths if p and os.path.exists(p)]
+        if not paths:
+            return True
+        try:
+            proc = console_spawn([sys.executable, os.path.abspath(__file__), 'play'] + paths)
+        except OSError as e:
+            log('login-screen sound failed', repr(e))
+            return False
+        k32 = ctypes.windll.kernel32
+        try:
+            k32.WaitForSingleObject(proc, 60000)
+        finally:
+            k32.CloseHandle(proc)
         return True
 
     def ring_logon(cid, name):
@@ -743,11 +793,9 @@ def service_main():
         say = tts(f'{name} đang gọi. Con đăng nhập để nghe máy.', 'call-logon.wav')
         log('call ringing at the login screen', cid, name)
         end = time.time() + RING_MAX
-        SYS.hold()
         try:
             while time.time() < end and CALL.get('id') == cid and CALL.get('state') == 'ringing':
                 if helper_alive():
-                    SYS.release(now=True)
                     log('he logged in: call window', cid)
                     to_helper(kind='ring', id=cid, name=name, url=f'{BASE}/call?id={urllib.parse.quote(cid)}', ring=ring(),
                               max=max(5, int(end - time.time())))
@@ -758,8 +806,8 @@ def service_main():
             if CALL.get('id') == cid and CALL.get('state') == 'ringing':
                 relay('POST', f'/agent/call/{cid}/end', {'reason': 'nologin'})
                 call_end_local(cid)
-        finally:
-            SYS.release(now=True)
+        except Exception:  # noqa: BLE001
+            log('ring at the login screen failed', traceback.format_exc())
 
     def ringer(c):
         cid, name = c['id'], PARENT.get(c.get('caller'), 'Bố')
@@ -1562,5 +1610,7 @@ def helper_main():
 if __name__ == '__main__':
     if MODE == 'helper':
         helper_main()
+    elif MODE == 'play':
+        play_main(sys.argv[2:])
     else:
         service_main()
