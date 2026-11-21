@@ -30,7 +30,7 @@ import urllib.parse
 import urllib.request
 import wave
 
-VERSION = 'w3'
+VERSION = 'w4'
 APP = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get('BO_DATA', r'C:\ProgramData\BoNhan')
 AUDIO = os.path.join(DATA, 'audio')          # readable by the child (helper plays these)
@@ -54,6 +54,7 @@ RING_MAX = 58
 PARENT = {'bo': 'Bố', 'me': 'Mẹ'}
 PARENTS_SQL = "('bo','me')"
 CALL_GAIN = float(CONF.get('call_gain', 1.5))
+VOLUME = float(CONF.get('volume', 0.85))   # speakers are raised to at least this while we talk
 LISTEN_WAIT = float(CONF.get('listen_wait', 10))      # s to start talking, else nothing is sent
 LISTEN_SILENCE = float(CONF.get('listen_silence', 2))  # s of silence that ends the answer
 LISTEN_MAX = float(CONF.get('listen_max', 60))
@@ -211,6 +212,122 @@ MODE = sys.argv[1] if len(sys.argv) > 1 else 'service'
 
 
 # ==================================================================================== SERVICE
+# ------------------------------------------------------------ speakers + media (Windows Core Audio, media keys API)
+def _endpoint():
+    """The default speakers' volume control (pycaw). Works from the child's session and from SYSTEM."""
+    import comtypes
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    try:
+        comtypes.CoInitialize()
+    except OSError:
+        pass
+    d = AudioUtilities.GetSpeakers()
+    ev = getattr(d, 'EndpointVolume', None)
+    if ev is not None:
+        return ev
+    return ctypes.cast(d.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None), ctypes.POINTER(IAudioEndpointVolume))
+
+
+def loud():
+    """Unmute and raise the speakers to VOLUME at least. Returns what to put back (or None)."""
+    try:
+        ev = _endpoint()
+        saved = (float(ev.GetMasterVolumeLevelScalar()), int(ev.GetMute()))
+        ev.SetMute(0, None)
+        if saved[0] < VOLUME:
+            ev.SetMasterVolumeLevelScalar(VOLUME, None)
+        return saved
+    except Exception as e:  # noqa: BLE001
+        log('volume failed', repr(e))
+        return None
+
+
+def unloud(saved):
+    if not saved:
+        return
+    try:
+        ev = _endpoint()
+        ev.SetMasterVolumeLevelScalar(saved[0], None)
+        ev.SetMute(saved[1], None)
+    except Exception as e:  # noqa: BLE001
+        log('volume restore failed', repr(e))
+
+
+def _media(fn):
+    import asyncio
+    from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as M
+
+    async def go():
+        return await fn(await M.request_async())
+    return asyncio.run(go())
+
+
+def media_pause():
+    """Pause every player that is playing (YouTube in Edge/Chrome, Spotify…). Returns the apps to resume."""
+    async def f(m):
+        out = []
+        for x in m.get_sessions():
+            if int(x.get_playback_info().playback_status) == 4 and await x.try_pause_async():   # 4 = Playing
+                out.append(x.source_app_user_model_id)
+        return out
+    try:
+        r = _media(f) or []
+        if r:
+            log('paused', r)
+        return r
+    except Exception as e:  # noqa: BLE001
+        log('media pause failed', repr(e))
+        return []
+
+
+def media_resume(apps):
+    if not apps:
+        return
+
+    async def f(m):
+        for x in m.get_sessions():
+            if x.source_app_user_model_id in apps and int(x.get_playback_info().playback_status) == 5:   # 5 = Paused
+                await x.try_play_async()
+    try:
+        _media(f)
+    except Exception as e:  # noqa: BLE001
+        log('media resume failed', repr(e))
+
+
+class Hold:
+    """While anyone holds it, the speakers are loud and the child's media is paused. The last release puts
+    things back after `linger` s, so a repeated message or play-then-listen does not toggle the music."""
+
+    def __init__(self, pause=True, linger=12):
+        self.n, self.saved, self.apps, self.pause, self.linger = 0, None, [], pause, linger
+        self.mx, self.gen = threading.Lock(), 0
+
+    def hold(self):
+        with self.mx:
+            self.n += 1
+            self.gen += 1
+            if self.n == 1 and self.saved is None and not self.apps:
+                self.apps = media_pause() if self.pause else []
+                self.saved = loud()
+
+    def release(self, now=False):
+        with self.mx:
+            self.n = max(0, self.n - 1)
+            gen = self.gen
+
+        def back():
+            with self.mx:
+                if self.n or self.gen != gen:
+                    return
+                saved, apps, self.saved, self.apps = self.saved, self.apps, None, []
+            unloud(saved)
+            media_resume(apps)
+        if now:
+            back()
+        else:
+            threading.Timer(self.linger, back).start()
+
+
 def service_main():
     import sqlite3
     os.makedirs(os.path.join(DATA, 'logs'), exist_ok=True)
@@ -594,20 +711,66 @@ def service_main():
     CALL = {}
     RANG = set()
 
+    SYS = Hold(pause=False, linger=0)   # the login screen: no media of his to pause
+
     def call_end_local(cid):
         if CALL.get('id') == cid:
             log('call over', cid, CALL.get('state'))
+            p, held = CALL.get('proc'), CALL.get('held')
             CALL.clear()
+            if p and p.poll() is None:
+                subprocess.run(['taskkill', '/T', '/F', '/PID', str(p.pid)], capture_output=True, creationflags=0x08000000)
+            if held:
+                SYS.release(now=True)
             to_helper(kind='call_end', id=cid)
+
+    def sys_play(paths):
+        """Play from the service itself (nobody logged in: the sound comes out at the login screen)."""
+        import winsound
+        for p in paths:
+            if p and os.path.exists(p):
+                try:
+                    winsound.PlaySound(p, winsound.SND_FILENAME)
+                except RuntimeError as e:
+                    log('login-screen sound failed', repr(e))
+                    return False
+        return True
+
+    def ring_logon(cid, name):
+        """Nobody logged in: ring and say who calls at the login screen; when he logs in, the call window opens."""
+        CALL.clear()
+        CALL.update(id=cid, state='ringing', at=time.time())
+        say = tts(f'{name} đang gọi. Con đăng nhập để nghe máy.', 'call-logon.wav')
+        log('call ringing at the login screen', cid, name)
+        end = time.time() + RING_MAX
+        SYS.hold()
+        try:
+            while time.time() < end and CALL.get('id') == cid and CALL.get('state') == 'ringing':
+                if helper_alive():
+                    SYS.release(now=True)
+                    log('he logged in: call window', cid)
+                    to_helper(kind='ring', id=cid, name=name, url=f'{BASE}/call?id={urllib.parse.quote(cid)}', ring=ring(),
+                              max=max(5, int(end - time.time())))
+                    return
+                if not sys_play([ring(), ring()] + ([say] if say else [])):
+                    time.sleep(2)
+                keep_helper()
+            if CALL.get('id') == cid and CALL.get('state') == 'ringing':
+                relay('POST', f'/agent/call/{cid}/end', {'reason': 'nologin'})
+                call_end_local(cid)
+        finally:
+            SYS.release(now=True)
 
     def ringer(c):
         cid, name = c['id'], PARENT.get(c.get('caller'), 'Bố')
-        if meta('lock_applied', False):
+        locked = meta('lock_applied', False)
+        # Edge refuses to run as SYSTEM (exit 1002), so auto-answer needs his session: at the login screen
+        # an auto call rings like a normal one.
+        if locked:
             relay('POST', f'/agent/call/{cid}/end', {'reason': 'locked'})
             return
         if not helper_alive():
-            relay('POST', f'/agent/call/{cid}/end', {'reason': 'nologin'})
-            return
+            return ring_logon(cid, name)
         CALL.clear()
         CALL.update(id=cid, state='ringing', at=time.time())
         if c.get('auto'):
@@ -1025,6 +1188,7 @@ def helper_main():
     EV = []            # events for the service
     ACT = queue.Queue()  # actions for the Tk thread
     play_lock = threading.Lock()
+    AUD = Hold()       # loud speakers + his media paused while we talk to him
     calls = {}         # call id -> {'proc', 'ringing'}
     STOP = set()       # job ids the service asked to stop
     UIQ = queue.Queue()  # callables to run on the Tk thread
@@ -1200,6 +1364,7 @@ def helper_main():
     def listen(a, note):
         rid, sent = a.get('rid'), False
         LISTENING['rid'] = rid
+        AUD.hold()
         try:
             play([a.get('beep')], rid=rid)
             data, ms = record(a, rid)
@@ -1212,6 +1377,7 @@ def helper_main():
         except Exception:  # noqa: BLE001
             log('listen failed', traceback.format_exc())
         finally:
+            AUD.release()
             UIQ.put(lambda: close(note))
             done(rid, sent)
 
@@ -1287,7 +1453,11 @@ def helper_main():
             popup(a['title'], a['body'], a.get('buttons') or [], a.get('msg_id'))
         elif k == 'play':
             def go():
-                play(a['paths'], a.get('repeat', 1), a.get('rid'))
+                AUD.hold()
+                try:
+                    play(a['paths'], a.get('repeat', 1), a.get('rid'))
+                finally:
+                    AUD.release()
                 done(a.get('rid'))
             threading.Thread(target=go, daemon=True).start()
         elif k == 'stop':
@@ -1299,6 +1469,7 @@ def helper_main():
         elif k == 'ring':
             cid = a['id']
             calls[cid] = {'ringing': True}
+            threading.Thread(target=AUD.hold, daemon=True).start()
             edge([f'--app={a["url"]}'])
             calls[cid]['note'] = popup(f'📞 {a["name"]} đang gọi', 'Bấm Nghe trên cửa sổ cuộc gọi', [], call_id=cid)
             threading.Thread(target=ring_loop, args=(cid, a['ring'], a.get('max', 58)), daemon=True).start()
@@ -1318,12 +1489,14 @@ def helper_main():
                                            '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required',
                                            a['url']])
             calls[cid] = {}
+            threading.Thread(target=AUD.hold, daemon=True).start()
             calls[cid]['note'] = popup(f'📞 {a["name"]} đang nói chuyện với con', 'Máy tự nghe máy. Bấm Kết thúc để dừng.',
                                        [['end_call', 'Kết thúc']], call_id=cid)
             threading.Thread(target=go, daemon=True).start()
         elif k == 'call_end' and a['id'] in calls:
             c = calls.pop(a['id'])
             c['ringing'] = False
+            threading.Thread(target=AUD.release, kwargs={'now': True}, daemon=True).start()
             winsound.PlaySound(None, 0)
             if c.get('note'):
                 try:
