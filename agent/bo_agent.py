@@ -1,10 +1,10 @@
-#!/opt/kidnest-bo/venv/bin/python3
+#!/opt/kids-talk/venv/bin/python3
 """Gọi điện - Nhắn tin con agent — runs as root on the child's laptop.
 
 - syncs with the relay Worker (messages, tasks, commands, status)
 - shows critical notifications and reads parent messages aloud in the child's session
 - serves the child's reply/task page on http://127.0.0.1:8765
-- samples the focused window (GNOME extension vn.kidnest.Bo) for the activity summary
+- samples the focused window (GNOME extension app.kidstalk.Agent) for the activity summary
 - voice: plays the parent's voice messages; after a spoken message it pauses media, listens on the
   mic (Silero VAD), sends the child's answer after 2 s of silence, then resumes media
 """
@@ -32,15 +32,15 @@ import urllib.parse
 import urllib.request
 import wave
 
-CONF_PATH = os.environ.get('BO_CONF', '/etc/kidnest-bo/agent.json')
+CONF_PATH = os.environ.get('BO_CONF', '/etc/kids-talk/agent.json')
 CONF = json.load(open(CONF_PATH))
 URL = CONF['url'].rstrip('/')
 TOKEN = CONF['token']
 KID = CONF.get('kid_user', '')   # the child's Linux account (required, set by install.sh)
 PORT = int(CONF.get('port', 8765))
 VOLUME = float(CONF.get('volume', 0.85))
-VOICE = CONF.get('voice', '/opt/kidnest-bo/voices/vi_VN-vais1000-medium.onnx')
-STATE_DIR = CONF.get('state_dir', '/var/lib/kidnest-bo')
+VOICE = CONF.get('voice', '/opt/kids-talk/voices/vi_VN-vais1000-medium.onnx')
+STATE_DIR = CONF.get('state_dir', '/var/lib/kids-talk')
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------- end-to-end encryption
@@ -167,13 +167,13 @@ def open_call(j):
     return j
 
 # Audio is played by the child's own user: keep it out of the root-only state dir.
-AUDIO_DIR = CONF.get('audio_dir', '/var/cache/kidnest-bo')
+AUDIO_DIR = CONF.get('audio_dir', '/var/cache/kids-talk')
 SYNC_EVERY = 60     # full sync for the status; changes arrive through the long-poll (/agent/wait)
 WAIT_S = 25
 SAMPLE_EVERY = 10
 IDLE_AWAY = 120
 VERSION = '7'
-VAD_MODEL = CONF.get('vad_model', '/opt/kidnest-bo/silero_vad.onnx')
+VAD_MODEL = CONF.get('vad_model', '/opt/kids-talk/silero_vad.onnx')
 LISTEN_WAIT = float(CONF.get('listen_wait', 10))     # s to start talking, else nothing is sent
 LISTEN_SILENCE = float(CONF.get('listen_silence', 2))  # s of silence that ends the answer
 LISTEN_MAX = float(CONF.get('listen_max', 60))
@@ -322,7 +322,7 @@ class Kid:
             return None
 
     def focus(self):
-        d = self.call('vn.kidnest.Bo', '/vn/kidnest/Bo', 'vn.kidnest.Bo', 'Status')
+        d = self.call('app.kidstalk.Agent', '/app/kidstalk/Agent', 'app.kidstalk.Agent', 'Status')
         if d:
             return json.loads(d[0])
         # Extension not loaded yet (needs a fresh login): idle + lock only.
@@ -412,7 +412,7 @@ def notify(title, body, msg_id=None, on_action=None):
     """Critical notification that stays until clicked; buttons answer the parent.
     on_action (repeating message): called on any button, and the buttons offer ⏸ Dừng phát."""
     def run():
-        cmd = ['notify-send', '-u', 'critical', '-a', 'Gọi điện - Nhắn tin con', '-i', '/opt/kidnest-bo/icon.png', '--wait']
+        cmd = ['notify-send', '-u', 'critical', '-a', 'Gọi điện - Nhắn tin con', '-i', '/opt/kids-talk/icon.png', '--wait']
         if msg_id and on_action:
             cmd += ['--action=stop=⏸ Dừng phát', '--action=ok=' + QUICK['ok'], '--action=open=Mở trả lời']
         elif msg_id:
@@ -596,7 +596,7 @@ def voice_file(key):
     if os.path.exists(p):
         return p
     req = urllib.request.Request(f'{URL}/agent/voice/{key}', headers={
-        'Authorization': f'Bearer {TOKEN}', 'user-agent': 'kidnest-bo-agent/' + VERSION})
+        'Authorization': f'Bearer {TOKEN}', 'user-agent': 'kids-talk-agent/' + VERSION})
     try:
         data = urllib.request.urlopen(req, timeout=60).read()
     except Exception as e:  # noqa: BLE001
@@ -723,7 +723,7 @@ def wav_bytes(pcm, rate=16000):
 
 
 def show_note(title, body, urgency='normal'):
-    r = KIDU.sh(['notify-send', '-p', '-u', urgency, '-a', 'Gọi điện - Nhắn tin con', '-i', '/opt/kidnest-bo/icon.png', title, body])
+    r = KIDU.sh(['notify-send', '-p', '-u', urgency, '-a', 'Gọi điện - Nhắn tin con', '-i', '/opt/kids-talk/icon.png', title, body])
     try:
         return int(r.stdout.strip()) if r and r.returncode == 0 else None
     except ValueError:
@@ -834,7 +834,7 @@ def upload_voices():
             continue
         qs = urllib.parse.urlencode({'cid': r['cid'], 'ms': r['ms'], 'at': r['at']})
         req = urllib.request.Request(f'{URL}/agent/voice?{qs}', data=enc_blob(data), method='PUT', headers={
-            'Authorization': f'Bearer {TOKEN}', 'content-type': 'audio/wav', 'user-agent': 'kidnest-bo-agent/' + VERSION})
+            'Authorization': f'Bearer {TOKEN}', 'content-type': 'audio/wav', 'user-agent': 'kids-talk-agent/' + VERSION})
         try:
             urllib.request.urlopen(req, timeout=90).read()
         except urllib.error.HTTPError as e:
@@ -965,8 +965,8 @@ def take_shot(cmd_id):
     try:
         if not KIDU.graphical():
             raise RuntimeError('con chưa đăng nhập')
-        path = f'{KIDU.run}/kidnest-bo-shot.png'
-        d = KIDU.call('vn.kidnest.Bo', '/vn/kidnest/Bo', 'vn.kidnest.Bo', 'Screenshot', 's', path)
+        path = f'{KIDU.run}/kids-talk-shot.png'
+        d = KIDU.call('app.kidstalk.Agent', '/app/kidstalk/Agent', 'app.kidstalk.Agent', 'Screenshot', 's', path)
         if not d or not d[0] or not os.path.exists(path):
             raise RuntimeError('chưa có extension (con cần đăng xuất/đăng nhập lại một lần)')
         from PIL import Image
@@ -980,7 +980,7 @@ def take_shot(cmd_id):
         err = str(e)
         log('shot failed', err)
     headers = {'Authorization': f'Bearer {TOKEN}', 'content-type': 'image/jpeg',
-               'user-agent': 'kidnest-bo-agent/' + VERSION}
+               'user-agent': 'kids-talk-agent/' + VERSION}
     if err:
         headers['x-error'] = urllib.request.quote(err[:300])
     req = urllib.request.Request(f'{URL}/agent/shot/{cmd_id}', data=enc_blob(data), method='PUT', headers=headers)
@@ -994,7 +994,7 @@ def take_shot(cmd_id):
 def relay(method, path, body=None, timeout=15):
     req = urllib.request.Request(URL + path, data=None if body is None else json.dumps(body).encode(), method=method,
                                  headers={'Authorization': f'Bearer {TOKEN}', 'content-type': 'application/json',
-                                          'user-agent': 'kidnest-bo-agent/' + VERSION})
+                                          'user-agent': 'kids-talk-agent/' + VERSION})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read())
@@ -1154,7 +1154,7 @@ def auto_answer(c):
 
 def auto_note(cid, name):
     """While an auto-answered call runs in his session: a notification with Kết thúc."""
-    p = KIDU.sh(['notify-send', '-p', '--wait', '-u', 'critical', '-a', 'Gọi điện - Nhắn tin con', '-i', '/opt/kidnest-bo/icon.png',
+    p = KIDU.sh(['notify-send', '-p', '--wait', '-u', 'critical', '-a', 'Gọi điện - Nhắn tin con', '-i', '/opt/kids-talk/icon.png',
                  '--action=end=Kết thúc', f'📞 {name} đang nói chuyện với con', 'Máy tự nghe máy. Bấm Kết thúc để dừng.'],
                 wait=False)
     try:
@@ -1286,7 +1286,7 @@ def call_ui(path, b):
 def post(path, body):
     req = urllib.request.Request(URL + path, data=json.dumps(body).encode(), method='POST',
                                  headers={'Authorization': f'Bearer {TOKEN}', 'content-type': 'application/json',
-                                          'user-agent': 'kidnest-bo-agent/' + VERSION})
+                                          'user-agent': 'kids-talk-agent/' + VERSION})
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
 
@@ -1380,7 +1380,7 @@ def waiter():
         try:
             req = urllib.request.Request(f"{URL}/agent/wait?ver={VER['v']}&t={WAIT_S}",
                                          headers={'Authorization': f'Bearer {TOKEN}',
-                                                  'user-agent': 'kidnest-bo-agent/' + VERSION})
+                                                  'user-agent': 'kids-talk-agent/' + VERSION})
             with urllib.request.urlopen(req, timeout=WAIT_S + 15) as r:
                 res = json.loads(r.read())
             backoff = 2
@@ -1421,7 +1421,7 @@ class UI(http.server.BaseHTTPRequestHandler):
         if self.path.startswith('/api/call/'):
             return self.send(*call_ui(self.path, {}))
         if self.path == '/icon.png':
-            return self.send(200, open('/opt/kidnest-bo/icon.png', 'rb').read(), 'image/png')
+            return self.send(200, open('/opt/kids-talk/icon.png', 'rb').read(), 'image/png')
         m = re.fullmatch(r'/voice/([\w-]{4,64})', self.path)
         if m:
             p = voice_file(m.group(1))

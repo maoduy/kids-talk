@@ -6,7 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const IFACE = `<node>
-  <interface name="vn.kidnest.Bo">
+  <interface name="app.kidstalk.Agent">
     <method name="Status"><arg type="s" direction="out" name="json"/></method>
     <method name="Screenshot"><arg type="s" direction="in" name="path"/><arg type="b" direction="out" name="ok"/></method>
   </interface>
@@ -40,11 +40,11 @@ class Service {
                     stream.close(null);
                     invocation.return_value(new GLib.Variant('(b)', [true]));
                 } catch (e) {
-                    invocation.return_dbus_error('vn.kidnest.Bo.Error', String(e));
+                    invocation.return_dbus_error('app.kidstalk.Agent.Error', String(e));
                 }
             });
         } catch (e) {
-            invocation.return_dbus_error('vn.kidnest.Bo.Error', String(e));
+            invocation.return_dbus_error('app.kidstalk.Agent.Error', String(e));
         }
     }
 }
@@ -53,8 +53,8 @@ export default class BoExtension extends Extension {
     enable() {
         this._service = new Service();
         this._dbus = Gio.DBusExportedObject.wrapJSObject(IFACE, this._service);
-        this._dbus.export(Gio.DBus.session, '/vn/kidnest/Bo');
-        this._name = Gio.bus_own_name_on_connection(Gio.DBus.session, 'vn.kidnest.Bo',
+        this._dbus.export(Gio.DBus.session, '/app/kidstalk/Agent');
+        this._name = Gio.bus_own_name_on_connection(Gio.DBus.session, 'app.kidstalk.Agent',
             Gio.BusNameOwnerFlags.NONE, null, null);
     }
 
