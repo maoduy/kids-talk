@@ -118,9 +118,9 @@ Con đăng xuất rồi đăng nhập lại một lần để tiện ích GNOME 
 **4b. Máy con Windows 11** (PowerShell quản trị). Bộ cài chưa tự cài phần chạy kèm, cần làm trước:
 
 1. Cài [Microsoft Visual C++ Redistributable x64](https://aka.ms/vs/17/release/vc_redist.x64.exe).
-2. Cài Python 3.12 vào `C:\Program Files\BoNhan\Python` (cho mọi người dùng), rồi
-   `"C:\Program Files\BoNhan\Python\python.exe" -m pip install piper-tts onnxruntime numpy pillow sounddevice cryptography`.
-3. Tải vào `C:\ProgramData\BoNhan\voices\`:
+2. Cài Python 3.12 vào `C:\Program Files\KidsTalk\Python` (cho mọi người dùng), rồi
+   `"C:\Program Files\KidsTalk\Python\python.exe" -m pip install piper-tts onnxruntime numpy pillow sounddevice cryptography`.
+3. Tải vào `C:\ProgramData\KidsTalk\voices\`:
    [`vi_VN-vais1000-medium.onnx` + `.onnx.json`](https://huggingface.co/rhasspy/piper-voices/tree/main/vi/vi_VN/vais1000/medium)
    và [`silero_vad.onnx`](https://github.com/snakers4/silero-vad/tree/master/src/silero_vad/data).
 
@@ -258,9 +258,9 @@ The child logs out and in once so the GNOME extension loads.
 **4b. Windows 11** (admin PowerShell). The installer does not install its runtime yet; first:
 
 1. Install the [Microsoft Visual C++ Redistributable x64](https://aka.ms/vs/17/release/vc_redist.x64.exe).
-2. Install Python 3.12 into `C:\Program Files\BoNhan\Python` (for all users), then
-   `"C:\Program Files\BoNhan\Python\python.exe" -m pip install piper-tts onnxruntime numpy pillow sounddevice cryptography`.
-3. Download into `C:\ProgramData\BoNhan\voices\`:
+2. Install Python 3.12 into `C:\Program Files\KidsTalk\Python` (for all users), then
+   `"C:\Program Files\KidsTalk\Python\python.exe" -m pip install piper-tts onnxruntime numpy pillow sounddevice cryptography`.
+3. Download into `C:\ProgramData\KidsTalk\voices\`:
    [`vi_VN-vais1000-medium.onnx` + `.onnx.json`](https://huggingface.co/rhasspy/piper-voices/tree/main/vi/vi_VN/vais1000/medium)
    and [`silero_vad.onnx`](https://github.com/snakers4/silero-vad/tree/master/src/silero_vad/data).
 

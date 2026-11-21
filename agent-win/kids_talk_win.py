@@ -1,10 +1,10 @@
 """Gọi điện - Nhắn tin con agent for Windows.
 
 Two processes, one file:
-  bo_win.py service   SYSTEM (scheduled task at startup): syncs with the relay, keeps the local state,
+  kids_talk_win.py service   SYSTEM (scheduled task at startup): syncs with the relay, keeps the local state,
                       makes the Vietnamese speech (Piper), serves the child's page on http://127.0.0.1:8765
                       and hands work to the helper.
-  bo_win.py helper    the child's own session (scheduled task at his logon, pythonw): popups, sound,
+  kids_talk_win.py helper    the child's own session (scheduled task at his logon, pythonw): popups, sound,
                       Edge windows for calls, which app is in front, screenshots. It long-polls the service.
 If the child kills the helper, the service starts it again (schtasks /run).
 """
@@ -32,7 +32,7 @@ import wave
 
 VERSION = 'w4'
 APP = os.path.dirname(os.path.abspath(__file__))
-DATA = os.environ.get('BO_DATA', r'C:\ProgramData\BoNhan')
+DATA = os.environ.get('KT_DATA', r'C:\ProgramData\KidsTalk')
 AUDIO = os.path.join(DATA, 'audio')          # readable by the child (helper plays these)
 SHOTS = os.path.join(DATA, 'shots')          # writable by the child (helper saves screenshots)
 try:   # the helper (child) cannot read agent.json: it holds the relay token
@@ -45,7 +45,7 @@ KID = CONF.get('kid_user', '')   # the child's local Windows account (required, 
 PORT = int(CONF.get('port', 8765))
 VOICE = CONF.get('voice', os.path.join(DATA, 'voices', 'vi_VN-vais1000-medium.onnx'))
 EDGE = CONF.get('edge', r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe')
-HELPER_TASK = 'BoNhan Helper'
+HELPER_TASK = 'KidsTalk Helper'
 SYNC_EVERY = 60     # full sync for the status; changes arrive through the long-poll (/agent/wait)
 WAIT_S = 25
 SAMPLE_EVERY = 10
@@ -197,7 +197,7 @@ def log(*a):
     except Exception:  # noqa: BLE001  (pythonw has no console)
         pass
     try:
-        d = os.path.join(os.environ.get('LOCALAPPDATA', DATA), 'BoNhan') if MODE == 'helper' else os.path.join(DATA, 'logs')
+        d = os.path.join(os.environ.get('LOCALAPPDATA', DATA), 'KidsTalk') if MODE == 'helper' else os.path.join(DATA, 'logs')
         with open(os.path.join(d, f'{MODE}.log'), 'a', encoding='utf-8') as f:
             f.write(line + '\n')
     except OSError:
@@ -369,7 +369,7 @@ def console_spawn(argv):
 
 
 def play_main(paths):
-    """`bo_win.py play a.wav b.wav`: started in the console session by the service (login screen)."""
+    """`kids_talk_win.py play a.wav b.wav`: started in the console session by the service (login screen)."""
     import winsound
     saved = loud()
     try:
@@ -433,7 +433,7 @@ def service_main():
         data = raw if raw is not None else (None if body is None else json.dumps(body).encode())
         req = urllib.request.Request(URL + path, data=data, method=method,
                                      headers={'Authorization': f'Bearer {TOKEN}', 'content-type': ctype,
-                                              'user-agent': 'bo-nhan-win/' + VERSION})
+                                              'user-agent': 'kids-talk-win/' + VERSION})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 b = r.read()
@@ -951,7 +951,7 @@ def service_main():
         except Exception as e:  # noqa: BLE001
             err = str(e)
         req = urllib.request.Request(f'{URL}/agent/shot/{cmd_id}', data=enc_blob(data), method='PUT', headers={
-            'Authorization': f'Bearer {TOKEN}', 'content-type': 'image/jpeg', 'user-agent': 'bo-nhan-win/' + VERSION,
+            'Authorization': f'Bearer {TOKEN}', 'content-type': 'image/jpeg', 'user-agent': 'kids-talk-win/' + VERSION,
             **({'x-error': urllib.parse.quote(err[:300])} if err else {})})
         try:
             urllib.request.urlopen(req, timeout=60).read()
@@ -1231,7 +1231,7 @@ def helper_main():
     import tkinter as tk
     import winsound
     user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
-    os.makedirs(os.path.join(os.environ.get('LOCALAPPDATA', DATA), 'BoNhan'), exist_ok=True)
+    os.makedirs(os.path.join(os.environ.get('LOCALAPPDATA', DATA), 'KidsTalk'), exist_ok=True)
     key = open(os.path.join(DATA, 'helper.key')).read().strip()
     EV = []            # events for the service
     ACT = queue.Queue()  # actions for the Tk thread
@@ -1532,7 +1532,7 @@ def helper_main():
 
             def go():
                 play(a.get('paths') or [])
-                d = os.path.join(os.environ['LOCALAPPDATA'], 'BoNhan', 'edgecall')
+                d = os.path.join(os.environ['LOCALAPPDATA'], 'KidsTalk', 'edgecall')
                 calls[cid]['proc'] = edge(['--headless=new', f'--user-data-dir={d}', '--no-first-run',
                                            '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required',
                                            a['url']])

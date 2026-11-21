@@ -1,7 +1,7 @@
 'use strict';
 // End-to-end encryption with one family key (AES-256-GCM, 32 bytes), shared by the parents' phones and the
 // children's computers and never sent to the relay. Text: "e1:" + base64url(iv | ciphertext+tag).
-// Blobs (voice, screenshots): "KT1" | iv | ciphertext+tag. Same format as the agents (bo_agent.py, bo_win.py).
+// Blobs (voice, screenshots): "KT1" | iv | ciphertext+tag. Same format as the agents (kids_talk_agent.py, kids_talk_win.py).
 // Loaded by app.js and by the service worker (to read push previews).
 const KT = (() => {
   const te = new TextEncoder(), td = new TextDecoder();

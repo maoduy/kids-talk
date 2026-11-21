@@ -15,7 +15,7 @@ VOICE_URL=https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vais
 
 install -d -m 755 $APP $APP/voices /etc/kids-talk
 install -d -m 700 /var/lib/kids-talk
-install -m 755 bo_agent.py $APP/bo_agent.py
+install -m 755 kids_talk_agent.py $APP/kids_talk_agent.py
 install -m 644 kid.html call.html icon.png $APP/
 # Calls: the call window may use the mic and play sound without a prompt.
 mkdir -p /etc/opt/chrome/policies/managed
@@ -85,7 +85,7 @@ After=network-online.target systemd-logind.service
 Wants=network-online.target
 
 [Service]
-ExecStart=$APP/venv/bin/python3 $APP/bo_agent.py
+ExecStart=$APP/venv/bin/python3 $APP/kids_talk_agent.py
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
